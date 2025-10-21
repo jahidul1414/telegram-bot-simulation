@@ -4,7 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Use environment variable for token (Render will add this securely)
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("8144184163:AAFoXga0moJqidy-uWLSKsdY890xub1oNEA")
 
 ADMIN_ID = 8301422296          # <-- Replace with your Telegram numeric ID
 DATA_FILE = "data.json"
@@ -128,6 +128,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = load_data()
 
+    # TEST: send a simple message to admin to check if it works
+await context.bot.send_message(chat_id=ADMIN_ID, text=f"Test from bot: user_id={user_id} replied")
+
+
     # If user is currently entering a number
     if user_id in awaiting_number:
         candidate = text.strip().replace(" ", "")
@@ -179,6 +183,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
