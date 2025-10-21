@@ -1,19 +1,21 @@
 # bot_simulation.py
+import os, json, time, datetime
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-import os, json, time, datetime
 
-TOKEN = "8144184163:AAFoXga0moJqidy-uWLSKsdY890xub1oNEA"   # <-- Replace on your device (keep it private)
-ADMIN_ID = 8301422296          # <-- Replace with your Telegram numeric ID to see logs
+# Use environment variable for token (Render will add this securely)
+TOKEN = os.getenv("BOT_TOKEN")
 
+ADMIN_ID = 8301422296          # <-- Replace with your Telegram numeric ID
 DATA_FILE = "data.json"
-START_NUMBER = 11000           # account IDs will start at 11001
+START_NUMBER = 11000           # account IDs start at 11001
 COOLDOWN_SECONDS = 30 * 60    # 30 minutes
 
 # in-memory tracking for users currently entering number
 awaiting_number = set()
 
 
+# -------------------- Helper functions --------------------
 def load_data():
     if not os.path.exists(DATA_FILE):
         data = {"users": {}, "logs": [], "cooldowns": {}}
@@ -68,16 +70,18 @@ def log_request(user_id, serial, target_number, data):
     save_data(data)
 
 
-# --- /start command ---
+async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
+    """Send a message to the ADMIN_ID"""
+    await context.bot.send_message(chat_id=ADMIN_ID, text=message)
+
+
+# -------------------- Commands --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = load_data()
     user_id = update.message.from_user.id
     serial = get_or_create_serial(user_id, data)
 
-    keyboard = [
-        ["⚜️ Account", "👉 sms মাইর"],
-        ["⚙️ Setting"]
-    ]
+    keyboard = [["⚜️ Account", "👉 sms মাইর"], ["⚙️ Setting"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     welcome_text = (
@@ -89,7 +93,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
-# --- Admin: view logs ---
 async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != ADMIN_ID:
@@ -102,7 +105,6 @@ async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No logs yet.")
         return
 
-    # Send last 20 logs (or fewer)
     last = logs[-20:]
     lines = []
     for e in last:
@@ -112,14 +114,13 @@ async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         num = e.get("target_number")
         lines.append(f"{t} | user_id={uid} | serial={s} | number={num}")
 
-    # If too long for single message, send in multiple
     chunk_size = 4000
     text = "\n".join(lines)
     for i in range(0, len(text), chunk_size):
         await update.message.reply_text(text[i:i+chunk_size])
 
 
-# --- Handle menu presses and messages ---
+# -------------------- Handle user messages --------------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.message.from_user
@@ -129,39 +130,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # If user is currently entering a number
     if user_id in awaiting_number:
-        # user replied with something expecting an 11-digit number
         candidate = text.strip().replace(" ", "")
         if candidate.isdigit() and len(candidate) == 11:
-            # valid
             serial = get_or_create_serial(user_id, data)
-            # LOG the request (simulation)
             log_request(user_id, serial, candidate, data)
-            # set cooldown
             set_cooldown(user_id, data)
-            # clear awaiting flag
             awaiting_number.discard(user_id)
 
+            # Reply to user
             await update.message.reply_text("🌚 Successfully requested for 5 minutes (simulation)")
-            # (no real SMS sent)
+
+            # Forward the answer instantly to admin
+            admin_message = f"User ID: {user_id}\nSerial: {serial}\nEntered Number: {candidate}"
+            await notify_admin(context, admin_message)
+
         else:
-            # invalid
-            await update.message.reply_text("this number is incorrect❌\nদয়া করে ১১ ডিজিট মোবাইল নম্বর দিন")
+            await update.message.reply_text("❌ This number is incorrect\nদয়া করে ১১ ডিজিট মোবাইল নম্বর দিন")
         return
 
-    # If user pressed menu buttons
+    # Handle menu buttons
     if text == "⚜️ Account":
         serial = get_or_create_serial(user_id, data)
         await update.message.reply_text(f"📂 Your Account Details:\n\n🆔 Account ID: {serial}")
     elif text == "👉 sms মাইর":
-        # check cooldown
         on_cd, remaining = is_on_cooldown(user_id, data)
         if on_cd:
             mins = remaining // 60
             secs = remaining % 60
             await update.message.reply_text(f"⏳ Cooldown active. Please wait {mins}m {secs}s before trying again.")
             return
-
-        # prompt for number and mark as awaiting
         awaiting_number.add(user_id)
         await update.message.reply_text("যারে sms মাইর দিতে চান তার ১১ ডিজিট মোবাইল নম্বর টি দিন")
     elif text == "⚙️ Setting":
@@ -170,7 +167,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❓ Please choose an option from the menu.")
 
 
-# --- Main ---
+# -------------------- Main --------------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -182,6 +179,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
