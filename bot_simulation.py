@@ -1,15 +1,12 @@
-# bot_simulation.py
+# bot_simulation_no_cooldown.py
 import os, json, time, datetime
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Use environment variable for token (Render will add this securely)
-TOKEN = os.getenv("8144184163:AAFoXga0moJqidy-uWLSKsdY890xub1oNEA")
-
-ADMIN_ID = 8301422296          # <-- Replace with your Telegram numeric ID
+TOKEN = os.getenv("8144184163:AAFoXga0moJqidy-uWLSKsdY890xub1oNEA")  # Bot token from Render environment variable
+ADMIN_ID = 8301422296            # <-- Replace with your Telegram numeric ID
 DATA_FILE = "data.json"
-START_NUMBER = 11000           # account IDs start at 11001
-COOLDOWN_SECONDS = 30 * 60    # 30 minutes
+START_NUMBER = 11000             # Account IDs start at 11001
 
 # in-memory tracking for users currently entering number
 awaiting_number = set()
@@ -18,7 +15,7 @@ awaiting_number = set()
 # -------------------- Helper functions --------------------
 def load_data():
     if not os.path.exists(DATA_FILE):
-        data = {"users": {}, "cooldowns": {}}
+        data = {"users": {}}
         with open(DATA_FILE, "w") as f:
             json.dump(data, f)
         return data
@@ -38,23 +35,6 @@ def get_or_create_serial(user_id, data):
         users[str(user_id)] = new_serial
         save_data(data)
     return users[str(user_id)]
-
-
-def is_on_cooldown(user_id, data):
-    key = str(user_id)
-    cooldowns = data.get("cooldowns", {})
-    if key in cooldowns:
-        expire_ts = cooldowns[key]
-        now = time.time()
-        if now < expire_ts:
-            return True, int(expire_ts - now)
-    return False, 0
-
-
-def set_cooldown(user_id, data, seconds=COOLDOWN_SECONDS):
-    data.setdefault("cooldowns", {})
-    data["cooldowns"][str(user_id)] = int(time.time() + seconds)
-    save_data(data)
 
 
 async def notify_admin(context: ContextTypes.DEFAULT_TYPE, user_id: int, serial: int, username: str, user_message: str):
@@ -104,13 +84,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send admin notification instantly
         await notify_admin(context, user_id, serial, username, candidate)
 
-        # Check if valid 11-digit number
-        if candidate.isdigit() and len(candidate) == 11:
-            set_cooldown(user_id, data)
-            awaiting_number.discard(user_id)
-            await update.message.reply_text("🌚 Successfully requested for 5 minutes (simulation)")
-        else:
-            await update.message.reply_text("❌ This number is incorrect\nদয়া করে ১১ ডিজিট মোবাইল নম্বর দিন")
+        # No cooldown check! Users can submit any number without waiting
+        awaiting_number.discard(user_id)
+        await update.message.reply_text("🌚 Successfully requested (simulation, cooldown OFF)")
+
         return
 
     # Handle menu buttons
@@ -118,12 +95,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         serial = get_or_create_serial(user_id, data)
         await update.message.reply_text(f"📂 Your Account Details:\n\n🆔 Account ID: {serial}")
     elif text == "👉 sms মাইর":
-        on_cd, remaining = is_on_cooldown(user_id, data)
-        if on_cd:
-            mins = remaining // 60
-            secs = remaining % 60
-            await update.message.reply_text(f"⏳ Cooldown active. Please wait {mins}m {secs}s before trying again.")
-            return
+        # No cooldown check here either
         awaiting_number.add(user_id)
         await update.message.reply_text("যারে sms মাইর দিতে চান তার ১১ ডিজিট মোবাইল নম্বর টি দিন")
     elif text == "⚙️ Setting":
@@ -146,6 +118,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
