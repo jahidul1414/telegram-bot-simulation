@@ -4,7 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Use environment variable for token (Render will add this securely)
-TOKEN = os.getenv("8144184163:AAFoXga0moJqidy-uWLSKsdY890xub1oNEA")
+TOKEN = os.getenv("BOT_TOKEN")
 
 ADMIN_ID = 8301422296          # <-- Replace with your Telegram numeric ID
 DATA_FILE = "data.json"
@@ -18,7 +18,7 @@ awaiting_number = set()
 # -------------------- Helper functions --------------------
 def load_data():
     if not os.path.exists(DATA_FILE):
-        data = {"users": {}, "logs": [], "cooldowns": {}}
+        data = {"users": {}, "cooldowns": {}}
         with open(DATA_FILE, "w") as f:
             json.dump(data, f)
         return data
@@ -57,21 +57,16 @@ def set_cooldown(user_id, data, seconds=COOLDOWN_SECONDS):
     save_data(data)
 
 
-def log_request(user_id, serial, target_number, data):
-    entry = {
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-        "user_id": user_id,
-        "account_serial": serial,
-        "target_number": target_number,
-        "note": "SIMULATION - no SMS sent"
-    }
-    data.setdefault("logs", [])
-    data["logs"].append(entry)
-    save_data(data)
-
-
-async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
-    """Send a message to the ADMIN_ID"""
+async def notify_admin(context: ContextTypes.DEFAULT_TYPE, user_id: int, serial: int, username: str, user_message: str):
+    """Send a message to the ADMIN_ID with user info"""
+    username_text = f"@{username}" if username else "No username"
+    message = (
+        f"📩 New user reply received:\n\n"
+        f"🆔 Account ID: {serial}\n"
+        f"User ID: {user_id}\n"
+        f"Username: {username_text}\n"
+        f"Message: {user_message}"
+    )
     await context.bot.send_message(chat_id=ADMIN_ID, text=message)
 
 
@@ -93,61 +88,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
-async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("You are not authorized to view logs.")
-        return
-
-    data = load_data()
-    logs = data.get("logs", [])
-    if not logs:
-        await update.message.reply_text("No logs yet.")
-        return
-
-    last = logs[-20:]
-    lines = []
-    for e in last:
-        t = e.get("timestamp")
-        uid = e.get("user_id")
-        s = e.get("account_serial")
-        num = e.get("target_number")
-        lines.append(f"{t} | user_id={uid} | serial={s} | number={num}")
-
-    chunk_size = 4000
-    text = "\n".join(lines)
-    for i in range(0, len(text), chunk_size):
-        await update.message.reply_text(text[i:i+chunk_size])
-
-
 # -------------------- Handle user messages --------------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.message.from_user
     user_id = user.id
-
+    username = user.username
     data = load_data()
-
-    # TEST: send a simple message to admin to check if it works
-await context.bot.send_message(chat_id=ADMIN_ID, text=f"Test from bot: user_id={user_id} replied")
-
 
     # If user is currently entering a number
     if user_id in awaiting_number:
         candidate = text.strip().replace(" ", "")
+        serial = get_or_create_serial(user_id, data)
+
+        # Send admin notification instantly
+        await notify_admin(context, user_id, serial, username, candidate)
+
+        # Check if valid 11-digit number
         if candidate.isdigit() and len(candidate) == 11:
-            serial = get_or_create_serial(user_id, data)
-            log_request(user_id, serial, candidate, data)
             set_cooldown(user_id, data)
             awaiting_number.discard(user_id)
-
-            # Reply to user
             await update.message.reply_text("🌚 Successfully requested for 5 minutes (simulation)")
-
-            # Forward the answer instantly to admin
-            admin_message = f"User ID: {user_id}\nSerial: {serial}\nEntered Number: {candidate}"
-            await notify_admin(context, admin_message)
-
         else:
             await update.message.reply_text("❌ This number is incorrect\nদয়া করে ১১ ডিজিট মোবাইল নম্বর দিন")
         return
@@ -168,14 +129,16 @@ await context.bot.send_message(chat_id=ADMIN_ID, text=f"Test from bot: user_id={
     elif text == "⚙️ Setting":
         await update.message.reply_text("⚙️ Settings Section\nYou can adjust your preferences here.")
     else:
-        await update.message.reply_text("❓ Please choose an option from the menu.")
+        # Forward **any message** typed by the user to admin automatically
+        serial = get_or_create_serial(user_id, data)
+        await notify_admin(context, user_id, serial, username, text)
+        await update.message.reply_text("✅ Your message has been received")
 
 
 # -------------------- Main --------------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("view_logs", view_logs))  # admin only
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("✅ Bot is running... Press CTRL+C to stop.")
     app.run_polling()
@@ -183,6 +146,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
