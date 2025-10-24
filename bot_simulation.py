@@ -6,6 +6,10 @@ from telegram.ext import (
     filters, ContextTypes, CallbackQueryHandler
 )
 
+import telegram
+print("python-telegram-bot version:", telegram.__version__)  # <--- Add this line
+
+
 # ===== CONFIG =====
 TOKEN = "8144184163:AAFoXga0moJqidy-uWLSKsdY890xub1oNEA"
 ADMIN_ID = 123456789  # Replace with your Telegram user ID
@@ -143,4 +147,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
