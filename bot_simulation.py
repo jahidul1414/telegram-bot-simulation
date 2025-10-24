@@ -7,7 +7,8 @@ from telegram.ext import (
 )
 
 import telegram
-print("python-telegram-bot version:", telegram.__version__)  # <--- Add this line
+print("PTB version:", telegram.__version__)
+print("PTB file location:", telegram.__file__)
 
 
 # ===== CONFIG =====
@@ -149,6 +150,7 @@ async def main_async():
 
 if __name__ == "__main__":
     asyncio.run(main_async())
+
 
 
 
