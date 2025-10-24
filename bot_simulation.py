@@ -135,7 +135,9 @@ async def show_menu(update: Update, query=None):
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 # ===== MAIN =====
-def main():
+import asyncio
+
+async def main_async():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -143,9 +145,10 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("✅ Bot is running... Press CTRL+C to stop.")
-    app.run_polling()
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_async())
+
 
 
