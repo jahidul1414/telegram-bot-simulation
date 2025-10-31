@@ -1,6 +1,7 @@
-setuptools>=65.5.0
-wheel
-python-telegram-bot==20.5
+python-telegram-bot==20.6
+aiohttp
+requests
+
 
 
 
